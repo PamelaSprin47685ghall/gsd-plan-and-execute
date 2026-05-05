@@ -1,5 +1,5 @@
 {
-  "name": "gsd-plan-and-execute",
+  "name": "gsd-plan-exec",
   "version": "5.1.0",
   "description": "Plan & Execute extension: orchestrate complex tasks via JS code with dynamic typed sub-agent forking.",
   "type": "module",
@@ -11,7 +11,7 @@
   "keywords": [
     "pi-package",
     "gsd-extension",
-    "plan-and-execute",
+    "plan-exec",
     "orchestration",
     "fork"
   ],

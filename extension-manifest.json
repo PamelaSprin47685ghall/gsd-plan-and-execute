@@ -1,5 +1,5 @@
 {
-  "id": "plan-and-execute",
+  "id": "plan-exec",
   "name": "Plan & Execute",
   "version": "5.1.0",
   "description": "Orchestrate complex tasks by writing JavaScript that forks sub-agents with typed return schemas.",
@@ -9,7 +9,7 @@
   },
   "provides": {
     "tools": [
-      "plan_and_execute"
+      "plan_exec"
     ],
     "hooks": [
       "session_shutdown"

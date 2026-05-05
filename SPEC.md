@@ -19,7 +19,7 @@
 ✅ 声明式编排：LLM 只需关注「做什么」，引擎负责「怎么做」
 ✅ 强类型契约：schema 即契约，返回即合规，消除运行时校验
 ✅ 用完即弃：子 Session 生命周期与 task() 调用严格绑定，自动回收
-✅ 递归可组合：子 Agent 可再次调用 plan_and_execute，形成执行树
+✅ 递归可组合：子 Agent 可再次调用 plan_exec，形成执行树
 ```
 
 ---
@@ -37,7 +37,7 @@
 │  │ }                               │   │
 │  └─────────────────────────────────┘   │
 └────────────────┬────────────────────────┘
-                 │ plan_and_execute(code)
+                 │ plan_exec(code)
                  ▼
 ┌─────────────────────────────────────────┐
 │         JS Orchestration Engine         │
@@ -82,11 +82,11 @@ async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>
 
 ### 3.2 工具注册定义
 
-#### `plan_and_execute` 工具
+#### `plan_exec` 工具
 
 ```javascript
 {
-  name: 'plan_and_execute',
+  name: 'plan_exec',
   description: `
     Write JavaScript to orchestrate complex tasks.
 
@@ -94,17 +94,17 @@ async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>
       async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>;
 
     Rules:
-    • Write a named async function that receives task as its parameter
+    • Write an async function named main that receives task as its parameter
     • Call await task(...) inside the function to fork sub-agents
     • Use standard JS control flow (if/for/Promise.all)
-    • The function must return the final result
+    • The function must return the final result from main
   `,
   parameters: {
     type: 'object',
     properties: {
       code: {
         type: 'string',
-        description: 'A named async function definition that takes task as its parameter'
+        description: 'An async function named main that takes task as its parameter'
       }
     },
     required: ['code']
@@ -136,7 +136,7 @@ async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>
 ### 4.1 Fork 语义（类 POSIX fork）
 
 ```
-父执行流: plan_and_execute 被调用 1 次
+父执行流: plan_exec 被调用 1 次
          ↓
       执行 JS 代码
          ↓
@@ -223,9 +223,9 @@ while (!taskResolved) {
 ## 五、关键实现文件结构
 
 ```
-plan-execute-extension/
-├── index.js          # 入口：激活时注册 plan_and_execute 工具
-├── tools.js          # 工具定义：plan_and_execute + 动态 return 生成逻辑
+plan-exec-extension/
+├── index.js          # 入口：激活时注册 plan_exec 工具
+├── tools.js          # 工具定义：plan_exec + 动态 return 生成逻辑
 ├── executor.js       # 执行引擎：JS 脚本执行 + Fork 生命周期管理
 └── types.d.ts        # (可选) TypeScript 类型定义，辅助 LLM 理解签名
 ```
@@ -250,7 +250,7 @@ export function activate(pi, ctx) {
 
 ```javascript
 // LLM 生成的 orchestration code
-async function plan(task) {
+async function main(task) {
   const [frontend, backend] = await Promise.all([
     task('Implement React Button component', componentSchema),
     task('Implement Express /api/button route', routeSchema),
@@ -268,7 +268,7 @@ async function plan(task) {
 ### 6.2 循环 + 条件判断
 
 ```javascript
-async function plan(task) {
+async function main(task) {
   let code = await task('Generate initial code', codeSchema)
   let review = await task(`Review: ${code}`, reviewSchema)
 
@@ -285,10 +285,10 @@ async function plan(task) {
 
 ```javascript
 // 主 orchestrator
-async function plan(task) {
+async function main(task) {
   const modules = await task('List project modules', moduleListSchema)
 
-  // 子 orchestrator (在子 Agent 内部再次调用 plan_and_execute)
+  // 子 orchestrator (在子 Agent 内部再次调用 plan_exec)
   const results = await Promise.all(
     modules.map((m) =>
       task(`Implement ${m.name}`, {

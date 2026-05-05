@@ -1,6 +1,7 @@
 // executor.js — JS orchestration engine + Fork lifecycle + UI bridging
 
 import { getSession } from './session-registry.js'
+import { gsdPkgURL } from '../../resolve-gsd.js'
 
 let createAgentSession = null
 let importPromise = null
@@ -8,9 +9,10 @@ let nextForkId = 0
 
 async function ensureCodingAgent() {
   if (!importPromise) {
-    importPromise = import('@gsd/pi-coding-agent').catch(() => ({
-      createAgentSession: null,
-    }))
+    importPromise = import(gsdPkgURL('pi-coding-agent')).then(mod => {
+      if (mod.createAgentSession) createAgentSession = mod.createAgentSession
+      return mod
+    })
   }
   const mod = await importPromise
   if (mod.createAgentSession) createAgentSession = mod.createAgentSession
@@ -234,7 +236,7 @@ async function spawnTaskFork(
 ) {
   if (!createAgentSession) {
     throw new Error(
-      'plan_and_execute engine not initialized: createAgentSession unavailable',
+      'plan_exec engine not initialized: createAgentSession unavailable',
     )
   }
 
@@ -322,7 +324,7 @@ async function spawnTaskFork(
     })
 
     ctx?.ui?.notify?.(
-      `[plan-execute] Fork #${forkId}: ${prompt.slice(0, 50)}...`,
+      `[plan-exec] Fork #${forkId}: ${prompt.slice(0, 50)}...`,
       'info',
     )
 
@@ -365,7 +367,7 @@ async function spawnTaskFork(
       details: { phase: 'join', forkId },
     })
 
-    ctx?.ui?.notify?.(`[plan-execute] Join #${forkId}`, 'info')
+    ctx?.ui?.notify?.(`[plan-exec] Join #${forkId}`, 'info')
 
     return result
   } catch (err) {
@@ -405,7 +407,7 @@ export async function executePlan(code, ctx, pi, signal, onUpdate) {
 
   if (!createAgentSession) {
     throw new Error(
-      'plan_and_execute requires @gsd/pi-coding-agent but it is not available',
+      'plan_exec requires @gsd/pi-coding-agent but it is not available',
     )
   }
 
@@ -430,10 +432,10 @@ export async function executePlan(code, ctx, pi, signal, onUpdate) {
     `
     "use strict";
     ${code};
-    if (typeof plan !== 'function') {
-      throw new Error('No named async function found. Please define a function like: async function plan(task) { ... }');
+    if (typeof main !== 'function') {
+      throw new Error('The provided code must define an async function named "main".');
     }
-    return plan(__task__);
+    return main(__task__);
   `,
   )
 

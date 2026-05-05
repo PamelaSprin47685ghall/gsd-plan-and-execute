@@ -28,7 +28,7 @@ export default async function planAndExecutePlugin(pi) {
       if (running.length === 0) return undefined
 
       ctx?.ui?.notify?.(
-        `[plan-execute] Steering user input to ${running.length} running fork(s): ${running.map((f) => `#${f.id}`).join(', ')}`,
+        `[plan-exec] Steering user input to ${running.length} running fork(s): ${running.map((f) => `#${f.id}`).join(', ')}`,
         'info',
       )
 
@@ -42,7 +42,7 @@ export default async function planAndExecutePlugin(pi) {
           }
         } catch (steerErr) {
           ctx?.ui?.notify?.(
-            `[plan-execute] Failed to steer to fork #${rec.id}: ${steerErr.message}`,
+            `[plan-exec] Failed to steer to fork #${rec.id}: ${steerErr.message}`,
             'warning',
           )
         }
@@ -57,7 +57,7 @@ export default async function planAndExecutePlugin(pi) {
       const forks = getActiveForksForSession(sessionId)
       if (forks.length === 0) return
       ctx?.ui?.notify?.(
-        `[plan-execute] Aborting ${forks.length} active task fork(s) on session shutdown`,
+        `[plan-exec] Aborting ${forks.length} active task fork(s) on session shutdown`,
         'info',
       )
       for (const fork of forks) {
