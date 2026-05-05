@@ -1,6 +1,7 @@
 import { ensureBundledExtensionPath } from './src/self-injection.js'
 import { createPlanAndExecuteTool } from './src/tool.js'
 import { getActiveForksForSession } from './src/executor.js'
+import { rememberSession } from './src/session-registry.js'
 
 ensureBundledExtensionPath(import.meta.url)
 
@@ -12,6 +13,10 @@ export default async function planAndExecutePlugin(pi) {
   try {
     const tool = await createPlanAndExecuteTool(pi)
     pi.registerTool(tool)
+
+    pi.on('session_start', (_event, ctx) => {
+      rememberSession(ctx?.sessionManager?.session)
+    })
 
     // Broadcast user input to all running task forks
     pi.on('input', (event, ctx) => {

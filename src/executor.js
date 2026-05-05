@@ -1,5 +1,7 @@
 // executor.js — JS orchestration engine + Fork lifecycle + UI bridging
 
+import { getSession } from './session-registry.js'
+
 let createAgentSession = null
 let importPromise = null
 let nextForkId = 0
@@ -402,8 +404,8 @@ export async function executePlan(code, ctx, pi, signal, onUpdate) {
     )
   }
 
-  const parentSession = ctx?.session
   const sessionId = ctx?.sessionManager?.getSessionId?.()
+  const parentSession = getSession(sessionId)
 
   const taskSpawner = async (prompt, schema) => {
     return spawnTaskFork(
