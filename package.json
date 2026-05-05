@@ -1,0 +1,36 @@
+{
+  "name": "gsd-plan-and-execute",
+  "version": "5.1.0",
+  "description": "Plan & Execute extension: orchestrate complex tasks via JS code with dynamic typed sub-agent forking.",
+  "type": "module",
+  "exports": "./index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "pi-package",
+    "gsd-extension",
+    "plan-and-execute",
+    "orchestration",
+    "fork"
+  ],
+  "gsd": {
+    "extension": true
+  },
+  "pi": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "lint-staged": {
+    "**/*.{js,json,md}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3"
+  }
+}
