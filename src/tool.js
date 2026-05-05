@@ -8,21 +8,22 @@ Injected signature:
   async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>;
 
 Rules:
-• Call await task(...) to fork a sub-agent for a specific subtask
+• Write a named async function that receives task as its parameter
+• Call await task(...) inside the function to fork sub-agents
 • Use standard JS control flow (if/for/while/Promise.all/Promise.race)
 • task() returns a Promise that resolves when the sub-agent calls its return tool
 • Sub-agents inherit the parent session's model, tools, and context
 • You MAY nest: a sub-agent can call plan_and_execute again
-• The code MUST end with a return statement: return final_value;`
+• Return the final result from the function`
 
 const TOOL_PROMPT_SNIPPET =
-  'Write JavaScript code to orchestrate complex multi-step tasks by forking typed sub-agents via task().'
+  'Write a named async function to orchestrate complex multi-step tasks by forking typed sub-agents via task().'
 
 const TOOL_PROMPT_GUIDELINES = [
   'Use plan_and_execute when a task naturally breaks into multiple subtasks that can be orchestrated with JS control flow.',
   'Pass a JSON Schema to task() to guarantee structured output from the sub-agent.',
   'Use Promise.all([]) to run independent subtasks in parallel.',
-  'Always end the orchestration code with return final_value;',
+  'Write a named async function that receives task as its parameter and returns the final result.',
 ]
 
 export async function createPlanAndExecuteTool(pi) {
@@ -44,7 +45,7 @@ export async function createPlanAndExecuteTool(pi) {
     parameters: Type.Object({
       code: Type.String({
         description:
-          'Async function body JavaScript code. Use await task(prompt, schema) to fork sub-agents. Use standard JS control flow. MUST end with: return final_value;',
+          'A named async function definition that takes task as its parameter. Inside the function, use await task(prompt, schema) to fork sub-agents. Use standard JS control flow. The function must return the final result.',
       }),
     }),
 

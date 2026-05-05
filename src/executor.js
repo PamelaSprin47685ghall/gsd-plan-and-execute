@@ -167,8 +167,10 @@ function buildReturnTool(schema, resolver) {
     parameters: {
       type: 'object',
       properties: {
-        result:
-          schema ?? { type: 'string', description: 'Task result (any type)' },
+        result: schema ?? {
+          type: 'string',
+          description: 'Task result (any type)',
+        },
       },
       required: ['result'],
     },
@@ -277,7 +279,11 @@ async function spawnTaskFork(
   try {
     const returnTool = buildReturnTool(schema, resolver)
     const parentCustomTools = parentSession?._customTools ?? []
-    const options = buildSessionOptions(parentSession, returnTool, parentCustomTools)
+    const options = buildSessionOptions(
+      parentSession,
+      returnTool,
+      parentCustomTools,
+    )
 
     const factoryResult = await createAgentSession(options)
     if (!factoryResult?.session) {
@@ -331,7 +337,8 @@ async function spawnTaskFork(
 
       while (childSession.isStreaming || childSession.agent?.isStreaming) {
         await new Promise((r) => setTimeout(r, 200))
-        if (resolved || childAbort.signal.aborted || parentSignal?.aborted) break
+        if (resolved || childAbort.signal.aborted || parentSignal?.aborted)
+          break
       }
 
       if (resolved) break
@@ -354,9 +361,7 @@ async function spawnTaskFork(
     const result = await resultPromise
 
     onUpdate?.({
-      content: [
-        { type: 'text', text: `[Join #${forkId}] task completed` },
-      ],
+      content: [{ type: 'text', text: `[Join #${forkId}] task completed` }],
       details: { phase: 'join', forkId },
     })
 
@@ -420,9 +425,18 @@ export async function executePlan(code, ctx, pi, signal, onUpdate) {
   }
 
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
-  const wrappedBody = `"use strict";\n${code}`
-  const fn = new AsyncFunction('task', wrappedBody)
+  const runner = new AsyncFunction(
+    '__task__',
+    `
+    "use strict";
+    ${code};
+    if (typeof plan !== 'function') {
+      throw new Error('No named async function found. Please define a function like: async function plan(task) { ... }');
+    }
+    return plan(__task__);
+  `,
+  )
 
-  const result = await fn(taskSpawner)
+  const result = await runner(taskSpawner)
   return result
 }

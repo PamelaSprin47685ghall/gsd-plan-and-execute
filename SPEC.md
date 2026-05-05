@@ -7,11 +7,13 @@
 ## 一、设计目标与核心理念
 
 ### 1.1 核心目标
+
 - **统一抽象**：将 DAG、Loop、状态管理等复杂编排模式，统一为「写一段 JS 代码」的简单心智模型
 - **类型安全**：通过 JSON Schema + 大模型原生 Tool Calling 机制，实现物理级别的结构化输出保证
 - **轻量调度**：在 LLM 层面实现类操作系统的进程调度模型（Fork/Join、上下文隔离、资源回收）
 
 ### 1.2 设计原则
+
 ```
 ✅ 最小侵入：不修改宿主框架核心，通过 Tool 扩展实现能力注入
 ✅ 声明式编排：LLM 只需关注「做什么」，引擎负责「怎么做」
@@ -75,32 +77,34 @@
  * @param schema - (可选) JSON Schema，用于强制结构化输出
  * @returns Promise<T> - 解析后必定符合 schema 的 JavaScript 对象
  */
-async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>;
+async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>
 ```
 
 ### 3.2 工具注册定义
 
 #### `plan_and_execute` 工具
+
 ```javascript
 {
   name: 'plan_and_execute',
   description: `
     Write JavaScript to orchestrate complex tasks.
-    
+
     Injected signature:
       async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>;
-    
+
     Rules:
-    • Call await task(...) to fork sub-agents
+    • Write a named async function that receives task as its parameter
+    • Call await task(...) inside the function to fork sub-agents
     • Use standard JS control flow (if/for/Promise.all)
-    • MUST end with: return final_value;
+    • The function must return the final result
   `,
   parameters: {
     type: 'object',
     properties: {
-      code: { 
+      code: {
         type: 'string',
-        description: 'Async function body JavaScript code'
+        description: 'A named async function definition that takes task as its parameter'
       }
     },
     required: ['code']
@@ -109,6 +113,7 @@ async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>;
 ```
 
 #### 动态生成的 `return` 工具（每次 Fork 时创建）
+
 ```javascript
 {
   name: 'return',
@@ -129,6 +134,7 @@ async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>;
 ## 四、执行模型详解
 
 ### 4.1 Fork 语义（类 POSIX fork）
+
 ```
 父执行流: plan_and_execute 被调用 1 次
          ↓
@@ -154,29 +160,31 @@ async function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>;
 ```
 
 ### 4.2 Context 继承策略
+
 ```javascript
 // 子 Session 配置组装
 const options = {
   cwd: rootCtx?.cwd,
   tools: [
-    ...(rootCtx?.tools?.filter(t => t.name !== 'return') || []), // 移除旧 return
-    dynamicReturnTool // 注入本次专属的、带 schema 的 return
+    ...(rootCtx?.tools?.filter((t) => t.name !== 'return') || []), // 移除旧 return
+    dynamicReturnTool, // 注入本次专属的、带 schema 的 return
   ],
   // 可选继承
   resourceLoader: parentSession?.resourceLoader,
   modelRegistry: parentSession?.modelRegistry,
   model: parentSession?.model,
-};
+}
 
 // 历史消息深拷贝注入（让子 Agent 知晓宏观上下文）
 if (parentSession?.state?.messages) {
   childSession.state.messages = JSON.parse(
-    JSON.stringify(parentSession.state.messages)
-  );
+    JSON.stringify(parentSession.state.messages),
+  )
 }
 ```
 
 ### 4.3 Schema 强制校验链路
+
 ```
 1. LLM 编写: await task("extract", { type: "object", properties: { name: { type: "string" } } })
               ↓
@@ -190,6 +198,7 @@ if (parentSession?.state?.messages) {
 ```
 
 ### 4.4 `noreturn` 语义与防逃逸机制
+
 ```javascript
 // return 工具执行时
 async execute(params, childCtx) {
@@ -201,7 +210,7 @@ async execute(params, childCtx) {
 // 子 Session 事件循环防御
 while (!taskResolved) {
   await childSession.prompt(currentPrompt);
-  
+
   // 如果流结束但未调用 return → 强制追问
   if (!taskResolved) {
     currentPrompt = "ERROR: You must call `return` tool to finish!";
@@ -222,10 +231,11 @@ plan-execute-extension/
 ```
 
 ### 核心依赖传递（无 Patch 设计）
+
 ```javascript
 // index.js
 export function activate(pi, ctx) {
-  registerPlanAndExecuteTool(pi, ctx); // 直接透传 pi
+  registerPlanAndExecuteTool(pi, ctx) // 直接透传 pi
 }
 
 // tools.js → executor.js → spawnTaskFork
@@ -237,51 +247,62 @@ export function activate(pi, ctx) {
 ## 六、使用示例
 
 ### 6.1 基础场景：串行 + 并行混合
+
 ```javascript
 // LLM 生成的 orchestration code
-const [frontend, backend] = await Promise.all([
-  task("Implement React Button component", componentSchema),
-  task("Implement Express /api/button route", routeSchema)
-]);
+async function plan(task) {
+  const [frontend, backend] = await Promise.all([
+    task('Implement React Button component', componentSchema),
+    task('Implement Express /api/button route', routeSchema),
+  ])
 
-const integration = await task(
-  `Integrate: ${JSON.stringify({ frontend, backend })}`,
-  integrationSchema
-);
+  const integration = await task(
+    `Integrate: ${JSON.stringify({ frontend, backend })}`,
+    integrationSchema,
+  )
 
-return { status: "done", artifact: integration };
+  return { status: 'done', artifact: integration }
+}
 ```
 
 ### 6.2 循环 + 条件判断
+
 ```javascript
-let code = await task("Generate initial code", codeSchema);
-let review = await task(`Review: ${code}`, reviewSchema);
+async function plan(task) {
+  let code = await task('Generate initial code', codeSchema)
+  let review = await task(`Review: ${code}`, reviewSchema)
 
-while (review.issues.length > 0) {
-  code = await task(`Fix: ${review.issues}`, codeSchema);
-  review = await task(`Re-review: ${code}`, reviewSchema);
+  while (review.issues.length > 0) {
+    code = await task(`Fix: ${review.issues}`, codeSchema)
+    review = await task(`Re-review: ${code}`, reviewSchema)
+  }
+
+  return { finalCode: code, reviewSummary: review.summary }
 }
-
-return { finalCode: code, reviewSummary: review.summary };
 ```
 
 ### 6.3 嵌套编排（递归 Fork）
+
 ```javascript
 // 主 orchestrator
-const modules = await task("List project modules", moduleListSchema);
+async function plan(task) {
+  const modules = await task('List project modules', moduleListSchema)
 
-// 子 orchestrator (在子 Agent 内部再次调用 plan_and_execute)
-const results = await Promise.all(
-  modules.map(m => task(`Implement ${m.name}`, {
-    type: "object",
-    properties: {
-      code: { type: "string" },
-      tests: { type: "array" }
-    }
-  }))
-);
+  // 子 orchestrator (在子 Agent 内部再次调用 plan_and_execute)
+  const results = await Promise.all(
+    modules.map((m) =>
+      task(`Implement ${m.name}`, {
+        type: 'object',
+        properties: {
+          code: { type: 'string' },
+          tests: { type: 'array' },
+        },
+      }),
+    ),
+  )
 
-return { modules: results };
+  return { modules: results }
+}
 ```
 
 ---
@@ -289,37 +310,45 @@ return { modules: results };
 ## 七、扩展性与最佳实践
 
 ### 7.1 类型定义辅助（提升 LLM 理解）
+
 ```typescript
 // types.d.ts - 可作为 system prompt 片段注入
 interface JSONSchema<T = any> {
-  type: 'object' | 'array' | 'string' | 'number' | 'boolean';
-  properties?: Record<string, JSONSchema>;
-  items?: JSONSchema;
-  required?: string[];
-  description?: string;
+  type: 'object' | 'array' | 'string' | 'number' | 'boolean'
+  properties?: Record<string, JSONSchema>
+  items?: JSONSchema
+  required?: string[]
+  description?: string
 }
 
-declare function task<T>(
-  prompt: string, 
-  schema?: JSONSchema<T>
-): Promise<T>;
+declare function task<T>(prompt: string, schema?: JSONSchema<T>): Promise<T>
 ```
 
 ### 7.2 错误处理与超时
+
 ```javascript
 // 在 executor 中添加
-const timeoutPromise = new Promise((_, reject) => 
-  setTimeout(() => reject(new Error('Task timeout')), 300000) // 5min
-);
+const timeoutPromise = new Promise(
+  (_, reject) => setTimeout(() => reject(new Error('Task timeout')), 300000), // 5min
+)
 
 const result = await Promise.race([
   resultPromise,
-  ...(parentSignal ? [new Promise((_, r) => parentSignal.addEventListener('abort', () => r(new Error('Parent aborted'))))] : []),
-  timeoutPromise
-]);
+  ...(parentSignal
+    ? [
+        new Promise((_, r) =>
+          parentSignal.addEventListener('abort', () =>
+            r(new Error('Parent aborted')),
+          ),
+        ),
+      ]
+    : []),
+  timeoutPromise,
+])
 ```
 
 ### 7.3 调试与可观测性
+
 ```javascript
 // 在 taskSpawner 中添加日志
 const taskSpawner = async (prompt, schema) => {
@@ -332,16 +361,17 @@ const taskSpawner = async (prompt, schema) => {
 ```
 
 ### 7.4 资源清理最佳实践
+
 ```javascript
 // spawnTaskFork 末尾
 try {
-  await resultPromise;
+  await resultPromise
 } finally {
   // 确保即使异常也能回收
   if (typeof childSession.destroy === 'function') {
-    childSession.destroy();
+    childSession.destroy()
   }
-  delete childSession._task_resolver; // 断开闭包引用
+  delete childSession._task_resolver // 断开闭包引用
 }
 ```
 
@@ -349,14 +379,14 @@ try {
 
 ## 八、与现有方案的对比优势
 
-| 能力 | 传统 DAG/Loop | Plan & Execute Engine |
-|------|--------------|----------------------|
-| **编排表达** | 配置式/硬编码 | 原生 JS，图灵完备 |
-| **类型安全** | 运行时校验/手动解析 | Schema + Tool Calling 物理保证 |
-| **上下文传递** | 显式传参/全局状态 | 自动继承 + 历史消息注入 |
-| **嵌套能力** | 需特殊设计 | 天然支持（子 Agent 也可 fork） |
-| **调试体验** | 黑盒执行 | JS 代码 + 日志 + 逐层返回 |
-| **扩展成本** | 新增节点需改框架 | 新增能力只需注册新 Tool |
+| 能力           | 传统 DAG/Loop       | Plan & Execute Engine          |
+| -------------- | ------------------- | ------------------------------ |
+| **编排表达**   | 配置式/硬编码       | 原生 JS，图灵完备              |
+| **类型安全**   | 运行时校验/手动解析 | Schema + Tool Calling 物理保证 |
+| **上下文传递** | 显式传参/全局状态   | 自动继承 + 历史消息注入        |
+| **嵌套能力**   | 需特殊设计          | 天然支持（子 Agent 也可 fork） |
+| **调试体验**   | 黑盒执行            | JS 代码 + 日志 + 逐层返回      |
+| **扩展成本**   | 新增节点需改框架    | 新增能力只需注册新 Tool        |
 
 ---
 
